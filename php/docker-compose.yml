@@ -1,0 +1,30 @@
+version: '3.3'
+services:
+  nginx:
+    image: bitnami/nginx
+    ports:
+        - '8000:8080'
+        - '443:8443'
+    volumes:
+        - ./nginx/my_vhost.conf:/bitnami/nginx/conf/vhosts/my_vhost.conf:ro
+        - ./app:/var/www/html
+    depends_on:
+        - phpfpm
+  database:
+    image: mysql:5.7
+    restart: always
+    ports:
+      - 3306:3306
+    environment:
+      TZ: Asia/Bangkok
+      MYSQL_DATABASE: flarum
+      MYSQL_USER: flarum
+      MYSQL_PASSWORD: pp6321
+      MYSQL_ROOT_PASSWORD: 123456
+      
+  phpfpm:
+    build:
+      context: .
+      dockerfile: php/Dockerfile
+    volumes:
+      - ./app:/var/www/html
