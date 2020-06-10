@@ -1,18 +1,24 @@
-name: Docker Image CI
+version: "2"
 
-on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+services:
 
-jobs:
+  redis-master:
+    image: k8s.gcr.io/redis:e2e
+    ports:
+      - "6379"
 
-  build:
+  redis-slave:
+    image: gcr.io/google_samples/gb-redisslave:v3
+    ports:
+      - "6379"
+    environment:
+      - GET_HOSTS_FROM=dns
 
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v2
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag Dockerfile:$(date +%s)
+  frontend:
+    image: gcr.io/google-samples/gb-frontend:v4
+    ports:
+      - "80:80"
+    environment:
+      - GET_HOSTS_FROM=dns
+    labels:
+      kompose.service.type: LoadBalancer
