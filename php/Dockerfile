@@ -1,30 +1,91 @@
-FROM php:7.1-fpm-alpine
-RUN apk update && apk add \
-    build-base \
-    libpng-dev \
-    curl-dev \
-    freetype \
-    libpng \
-    libjpeg-turbo \
-    freetype-dev \
-    libpng-dev \
-    jpeg-dev \
-    libjpeg \
-    libjpeg-turbo-dev \
-    git
-  
-RUN docker-php-ext-configure gd \
-    --with-freetype-dir=/usr/lib/ \
-    --with-png-dir=/usr/lib/ \
-    --with-jpeg-dir=/usr/lib/ \
-    --with-gd \
-  && docker-php-ext-install \
-    curl \
-    gd \
-    zip \
-    pdo_mysql
-RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
-  && php composer-setup.php --install-dir=/bin --filename=composer
-RUN echo 'memory_limit = 1024M' >> /usr/local/etc/php/conf.d/docker-php-memlimit.ini;
-WORKDIR /var/www/html
-EXPOSE 9000
+FROM php:7.4.4-fpm-alpine
+MAINTAINER Ludwig Ruderstaller "l.ruderstaller@cwd.at"
+
+ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_DISABLE_XDEBUG_WARN=1 \
+    PHPREDIS_VERSION=5.1.1 
+ENV LD_PRELOAD /usr/lib/preloadable_libiconv.so php
+
+RUN set -xe \
+ && apk add --no-cache --virtual .build-deps \            
+            tzdata \
+	    $PHPIZE_DEPS \
+ && apk add gnu-libiconv --update-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/community/ --allow-untrusted \
+ && cp /usr/share/zoneinfo/UTC /etc/localtime \
+ && echo 'UTC' > /etc/localtime \
+
+ && apk add --no-cache \
+	openssl-dev \
+        bash \
+        freetype-dev \
+        libpng-dev \
+        libjpeg-turbo-dev \
+        sqlite-dev \
+        curl \
+	curl-dev \
+        libsodium-dev \
+        icu-dev \
+        libxml2-dev \
+        recode-dev \
+        libxslt-dev \
+        git \
+        postgresql-client \
+        postgresql-dev \
+        openssh-client \
+            libmcrypt-dev \
+        libmcrypt \
+                libzip-dev \
+                libgcrypt-dev \
+        oniguruma-dev \
+     && apk --update --no-cache add grep \
+ && mkdir -p /usr/src/php/ext/redis \
+ && curl -L https://github.com/phpredis/phpredis/archive/$PHPREDIS_VERSION.tar.gz | tar xvz -C /usr/src/php/ext/redis --strip 1 \
+ && echo 'redis' >> /usr/src/php-available-exts \
+
+   && docker-php-ext-configure gd \
+      --with-freetype=/usr/include/ \
+ 
+ && docker-php-ext-install -j$(grep -c ^processor /proc/cpuinfo 2>/dev/null || 1)\
+    	gd \
+        bcmath \
+        opcache \
+        iconv \
+        mysqli \
+        pdo \
+        pdo_mysql \
+        pdo_sqlite \
+        pdo_pgsql \
+        zip \
+        xml \
+        xsl \
+        intl \
+        json \
+        mbstring \
+                curl \
+        simplexml \
+        soap \
+        bcmath \
+        redis \
+    
+ && docker-php-ext-install sodium \
+
+ && apk del .build-deps \
+ && rm -rf /tmp/* /var/cache/apk/* 
+
+    RUN echo "memory_limit = 128M" > /usr/local/etc/php/conf.d/custom.ini \
+    && echo "max_execution_time = 60" >> /usr/local/etc/php/conf.d/custom.ini \
+    && echo "error_reporting=E_ALL" >> /usr/local/etc/php/conf.d/custom.ini \
+    && echo "log_errors=On" >> /usr/local/etc/php/conf.d/custom.ini \
+    && echo "error_log = /proc/self/fd/2" >> /usr/local/etc/php/conf.d/custom.ini \
+    && echo "expose_php = Off" >> /usr/local/etc/php/conf.d/custom.ini \
+    && echo "pm.status_path = /status" >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo "ping.path = /ping" >> /usr/local/etc/php-fpm.d/zz-docker.conf \
+    && echo "catch_workers_output = yes" >> /usr/local/etc/php-fpm.d/zz-docker.conf 
+
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+RUN composer global require hirak/prestissimo --no-plugins --no-scripts
+
+RUN addgroup -S sudo \
+    && adduser -h /home/web -u 1000 -S -s /bin/bash -G sudo web \
+    && echo "%sudo ALL=NOPASSWD:ALL" > /etc/sudoers
+
